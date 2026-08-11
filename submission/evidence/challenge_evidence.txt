@@ -1,0 +1,22 @@
+Challenge ID: day13-k3-observability-v1
+Cohort: K3
+Incident: rag_slow
+Affected Feature: refund
+Latency Threshold: 2000ms
+
+Client-side Roundtrip Latencies (Concurrency = 5):
+- req-2f15e4ba | refund | 13279.1ms
+- req-529b93f6 | refund | 13280.7ms
+- req-0df0c311 | refund | 13281.8ms
+- req-d61309ac | refund | 13280.9ms
+- req-a56422c0 | refund | 13283.3ms
+
+FastAPI Server-side Internal processing latencies:
+- req-2f15e4ba: latency_ms=2650, ts=2026-08-11T03:40:22.150Z
+- req-529b93f6: latency_ms=2651, ts=2026-08-11T03:40:24.804Z
+- req-0df0c311: latency_ms=2650, ts=2026-08-11T03:40:27.458Z
+- req-d61309ac: latency_ms=2650, ts=2026-08-11T03:40:30.111Z
+- req-a56422c0: latency_ms=2650, ts=2026-08-11T03:40:32.765Z
+
+Analysis & Root Cause:
+The `rag_slow` incident simulates latency spikes in Vector Store retrievals by calling `time.sleep(2.5)`. Because FastAPI route handler `/chat` is an `async def` function running on the main event loop, synchronous blockings like `time.sleep` completely lock the event loop, forcing requests to execute sequentially in a Head-of-Line blocking manner. Thus, individual requests internal processing takes ~2.65s (2.5s RAG + 150ms LLM), but clients observe up to 13.2s because of waiting in the Event Loop queue.

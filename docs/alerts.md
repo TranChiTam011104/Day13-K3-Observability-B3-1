@@ -4,43 +4,48 @@ Mỗi alert phải dựa trên triệu chứng người dùng hoặc SLO, không
 
 ## Alert 1
 
-- Tên: high_latency_p95
-- Severity: warning
-- SLI/SLO liên quan: latency_p95_ms (SLO < 3000ms)
-- Điều kiện và thời gian duy trì: latency_p95_ms > 2000 cho 5m
-- Ảnh hưởng tới người dùng: Ứng dụng phản hồi chậm, trải nghiệm người dùng giảm sút.
+- Tên: LatencyP95Exceeded
+- Severity: critical
+- SLI/SLO liên quan: latency_p95_ms <= 3000ms
+- Điều kiện và thời gian duy trì: latency_p95_ms > 3000ms trong 1 phút.
+- Ảnh hưởng tới người dùng: Phản hồi từ chatbot bị trễ nặng, người dùng phải chờ lâu hoặc bị timeout.
 - Ba bước kiểm tra đầu tiên:
-  1. Kiểm tra dashboard xem có sự gia tăng đột biến về thời gian xử lý (latency percentiles).
-  2. Tra cứu logs để kiểm tra xem có incident nào đang được kích hoạt (như `rag_slow`).
-  3. Mở Langfuse trace để tìm span nào đang tốn nhiều thời gian nhất trong luồng xử lý.
-- Mitigation tạm thời: Tắt incident đang kích hoạt hoặc chuyển sang chế độ fallback cục bộ (local fallback) để tránh gọi vector store bị chậm.
-- Owner: Thái-V3
+  1. Kiểm tra endpoint `/health` xem có incident `rag_slow` nào đang bật hay không.
+  2. Mở trace trên Langfuse, sắp xếp theo độ trễ giảm dần để xác định span (RAG retrieve hay LLM generate) gây trễ chính.
+  3. Tìm kiếm log theo `correlation_id` của request bị trễ để kiểm tra xem có lỗi block Event Loop trong FastAPI hay không.
+- Mitigation tạm thời:
+  - Tắt incident bằng lệnh: `python scripts/inject_incident.py --disable`.
+  - Khởi động lại FastAPI server để làm sạch hàng đợi Event Loop.
+- Owner: Thai-V3
 
 ## Alert 2
 
-- Tên: high_error_rate
-- Severity: critical
-- SLI/SLO liên quan: error_rate_pct (SLO < 2%)
-- Điều kiện và thời gian duy trì: error_rate_pct > 2% trong 5m
-- Ảnh hưởng tới người dùng: Người dùng nhận phản hồi lỗi 500 từ hệ thống, chat bị gián đoạn.
+- Tên: ErrorRateHigh
+- Severity: warning
+- SLI/SLO liên quan: error_rate_pct <= 2%
+- Điều kiện và thời gian duy trì: error_rate_pct > 2% trong 2 phút.
+- Ảnh hưởng tới người dùng: Người dùng liên tục gặp lỗi hệ thống (HTTP 500) hoặc không nhận được câu trả lời từ chatbot.
 - Ba bước kiểm tra đầu tiên:
-  1. Xem dashboard để xác định tỷ lệ lỗi hiện tại.
-  2. Tra cứu logs tìm các bản ghi lỗi (`request_failed`) để lấy `error_type` và chi tiết thông báo lỗi.
-  3. Tìm kiếm correlation ID liên quan để tái hiện lỗi cục bộ.
-- Mitigation tạm thời: Rollback phiên bản deploy gần nhất nếu lỗi do code mới, hoặc kích hoạt mạch ngắt (circuit breaker) cho dịch vụ bên thứ ba bị lỗi.
-- Owner: Thái-V3
+  1. Kiểm tra log `data/logs.jsonl` tìm các dòng có `event == "request_failed"` để xác định `error_type` và chi tiết lỗi.
+  2. Kiểm tra xem incident `tool_fail` có đang được kích hoạt ở `/health` hay không.
+  3. Kiểm tra kết nối mạng tới mô hình LLM hoặc Vector Database.
+- Mitigation tạm thời:
+  - Nếu do incident `tool_fail`, tắt nó bằng cách disable incident.
+  - Sử dụng local model hoặc cơ chế fallback (như cache hoặc câu trả lời mặc định) để tránh trả về HTTP 500 cho người dùng.
+- Owner: Thai-V3
 
 ## Alert 3
 
-- Tên: total_cost_spike
+- Tên: CostSpikeAlert
 - Severity: warning
-- SLI/SLO liên quan: daily_cost_usd (SLO < 2.5 USD)
-- Điều kiện và thời gian duy trì: total_cost_usd > 2.5 USD
-- Ảnh hưởng tới người dùng: Nguy cơ cạn kiệt ngân sách API dẫn đến dừng dịch vụ toàn hệ thống.
+- SLI/SLO liên quan: daily_cost_usd <= 2.5 USD
+- Điều kiện và thời gian duy trì: total_cost_usd > 2.5 USD trong 5 phút.
+- Ảnh hưởng tới người dùng: Không ảnh hưởng trực tiếp đến trải nghiệm người dùng, nhưng gây lãng phí ngân sách lớn và có thể làm cạn kiệt tài khoản API key.
 - Ba bước kiểm tra đầu tiên:
-  1. Kiểm tra panel chi phí (Cost over time) để xác định xem chi phí tăng từ thời điểm nào.
-  2. Truy vấn logs lọc theo lượng token lớn nhất hoặc user tiêu tốn nhiều chi phí nhất.
-  3. Kiểm tra xem ứng dụng có bị lặp truy vấn vô hạn hoặc tải lên tài liệu quá lớn không.
-- Mitigation tạm thời: Áp dụng rate limiting chặt hơn cho user spam, hoặc tạm thời chuyển đổi sang model có chi phí rẻ hơn (như Claude Haiku/GPT-4o-mini).
-- Owner: Thái-V3
-
+  1. Kiểm tra tổng lượng token tiêu thụ (`tokens_in`, `tokens_out`) trong log xem có tăng đột biến không.
+  2. Xem các request có kích thước prompt lớn bất thường và xác định `user_id_hash` hoặc `session_id` đang thực hiện các request này.
+  3. Kiểm tra xem incident `cost_spike` có đang bật không.
+- Mitigation tạm thời:
+  - Disable incident `cost_spike` nếu đang bật.
+  - Tạm thời khóa hoặc giới hạn tần suất (rate-limit) đối với `user_id_hash` đang gửi prompt quá lớn hoặc spam liên tục.
+- Owner: Thai-V3

@@ -1,20 +1,20 @@
 alerts:
-  - name: high_latency_p95
-    severity: warning
-    condition: latency_p95_ms > 2000 for 5m
-    type: symptom-based
-    owner: Thái-V3
-    runbook: docs/alerts.md#alert-1
-  - name: high_error_rate
+  - name: LatencyP95Exceeded
     severity: critical
-    condition: error_rate_pct > 2 for 5m
+    condition: latency_p95_ms > 3000 for 1m
     type: symptom-based
-    owner: Thái-V3
-    runbook: docs/alerts.md#alert-2
-  - name: total_cost_spike
+    owner: Thai-V3
+    runbook: docs/alerts.md#alert-1
+  - name: ErrorRateHigh
     severity: warning
-    condition: total_cost_usd > 2.5
+    condition: error_rate_pct > 2 for 2m
     type: symptom-based
-    owner: Thái-V3
+    owner: Thai-V3
+    runbook: docs/alerts.md#alert-2
+  - name: CostSpikeAlert
+    severity: warning
+    condition: total_cost_usd > 2.5 for 5m
+    type: symptom-based
+    owner: Thai-V3
     runbook: docs/alerts.md#alert-3
 
