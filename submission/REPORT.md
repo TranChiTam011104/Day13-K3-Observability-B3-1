@@ -2,15 +2,9 @@
 
 ## 1. Thông tin nhóm
 
-<<<<<<< HEAD
 - Tên nhóm: B3-1
 - Repository URL: https://github.com/TranChiTam011104/Day13-K3-Observability-B3-1.git
-- Commit SHA cuối:
-=======
-- Tên nhóm: Nhóm 5 thành viên (TRUNG-V4)
-- Repository URL: https://github.com/TranChiTam011104/Day13-K3-Observability-B3-1
-- Commit SHA cuối: 5f7e4efebccb6916e4974524fc86b2300e1e33a2
->>>>>>> 788528c83fe512f55c0ca3951b30d4cbbf1df6ee
+- Commit SHA cuối: 08fb83602436154cbb3901f29fc3b04672f4dd94
 - Thành viên và vai trò:
   - Hùng (V1) — Logging & PII
   - Hoàng (V2) — Tracing & Prompt Version
@@ -71,15 +65,26 @@
 
 ## 6. Điều tra challenge
 
-*Chưa thực hiện - Đang dừng ở giai đoạn CP2 để hoàn thành thực nghiệm practice và xây dựng các chỉ số*
-
-- Challenge ID:
+- Challenge ID: `day13-k3-observability-v1`
 - Triệu chứng từ metrics:
-- Trace ID liên quan:
+  - Khi chịu tải đồng thời (concurrency = 5), thời gian phản hồi đo từ client tăng vọt lên rất cao, trung bình từ **~5.4 giây đến ~13.3 giây** (vượt ngưỡng SLO latency 3 giây).
+  - Tuy nhiên, độ trễ xử lý nội bộ đo từ server-side (`response_sent.latency_ms`) của mỗi request chỉ là **~2650ms**.
+- Trace ID liên quan: Traces được map qua logs cục bộ thông qua các Correlation ID của challenge.
 - Log line/correlation ID liên quan:
+  - Correlation IDs: `req-afabf0bd`, `req-b2e46f18`, `req-d69bcddf`, `req-f50d5e8f`, `req-0da60043`
+  - Dòng log tiêu biểu:
+    ```json
+    {"service": "api", "latency_ms": 2650, "tokens_in": 31, "tokens_out": 84, "cost_usd": 0.001353, "quality_score": 0.9, "payload": {"answer_preview": "Starter answer. Teams should improve this output logic and add better quality ch..."}, "event": "response_sent", "session_id": "k3-challenge-s02", "model": "mock", "user_id_hash": "867738e76862", "correlation_id": "req-afabf0bd", "feature": "refund", "env": "dev", "level": "info", "ts": "2026-08-11T05:35:15.016190Z"}
+    ```
 - Root cause:
+  - Incident `rag_slow` đã được kích hoạt cho feature `refund`. Lệnh `time.sleep(2.5)` đồng bộ trong RAG retrieve chặn đứng Event Loop chính của FastAPI.
+  - Do route handler được định nghĩa dưới dạng `async def`, việc block Event Loop buộc các request concurrent khác phải xếp hàng chờ tuần tự (Head-of-Line blocking), khiến độ trễ từ phía client tích lũy kéo dài lên đến ~13.3 giây.
 - Fix action:
+  - Định nghĩa hàm `retrieve()` bất đồng bộ: `async def retrieve(...)` và sử dụng `await asyncio.sleep(2.5)` thay cho `time.sleep(2.5)`.
+  - Hoặc bọc hàm đồng bộ trong thread pool bằng `await anyio.to_thread.run_sync()`.
 - Preventive measure:
+  - Tránh sử dụng bất kỳ thư viện hay tác vụ block đồng bộ trực tiếp trong các `async def` handler trong FastAPI.
+  - Bổ sung concurrency load tests trong CI/CD pipeline để phát hiện sớm các sự cố nghẽn Event Loop dưới tải trọng đồng thời.
 
 ## 7. Đóng góp cá nhân
 
