@@ -2,15 +2,9 @@
 
 ## 1. Thông tin nhóm
 
-<<<<<<< HEAD
 - Tên nhóm: B3-1
 - Repository URL: https://github.com/TranChiTam011104/Day13-K3-Observability-B3-1.git
 - Commit SHA cuối:
-=======
-- Tên nhóm: Nhóm 5 thành viên (TRUNG-V4)
-- Repository URL: https://github.com/TranChiTam011104/Day13-K3-Observability-B3-1
-- Commit SHA cuối: 5f7e4efebccb6916e4974524fc86b2300e1e33a2
->>>>>>> 788528c83fe512f55c0ca3951b30d4cbbf1df6ee
 - Thành viên và vai trò:
   - Hùng (V1) — Logging & PII
   - Hoàng (V2) — Tracing & Prompt Version
@@ -71,15 +65,79 @@
 
 ## 6. Điều tra challenge
 
-*Chưa thực hiện - Đang dừng ở giai đoạn CP2 để hoàn thành thực nghiệm practice và xây dựng các chỉ số*
+### Challenge ID
+`day13-k3-observability-v1` (Cohort: K3)
 
-- Challenge ID:
-- Triệu chứng từ metrics:
-- Trace ID liên quan:
-- Log line/correlation ID liên quan:
-- Root cause:
-- Fix action:
-- Preventive measure:
+### Triệu chứng từ metrics
+- **Latency tăng vọt**: Từ ~150ms (normal) lên ~12,000-15,000ms (incident)
+- **Vượt ngưỡng**: 2000ms threshold bị vượt xa ~6-7 lần
+- **5/5 requests** trong challenge đều có latency > 2000ms
+- Latency breakdown:
+  - `req-530fa146`: 12369.7ms (HTTP), 4309ms (server-side)
+  - `req-b6280f50`: 15027.0ms (HTTP), 2651ms (server-side)
+  - `req-bc3fcd0b`: 15025.9ms (HTTP), 2650ms (server-side)
+  - `req-9d7ab041`: 15027.3ms (HTTP), 2651ms (server-side)
+  - `req-8f242549`: 15025.0ms (HTTP), 2651ms (server-side)
+
+### Trace ID liên quan
+- Primary: `req-530fa146` (challenge k3-challenge-s05)
+- Secondary: `req-b6280f50`, `req-bc3fcd0b`, `req-9d7ab041`, `req-8f242549`
+
+### Log line/correlation ID liên quan
+```json
+{"service": "api", "event": "request_received", "correlation_id": "req-530fa146", "session_id": "k3-challenge-s05", "feature": "refund", "user_id_hash": "5da42a0d3d01", "level": "info", "ts": "2026-08-11T05:48:06.113585Z"}
+{"service": "api", "event": "response_sent", "latency_ms": 4309, "correlation_id": "req-530fa146", "session_id": "k3-challenge-s05", "feature": "refund", "level": "info", "ts": "2026-08-11T05:48:10.508179Z"}
+```
+Incident enable log:
+```json
+{"service": "control", "event": "incident_enabled", "payload": {"name": "rag_slow"}, "correlation_id": "req-ab7bb3ee", "level": "warning", "ts": "2026-08-11T05:47:48.106982Z"}
+```
+
+### Root cause
+**Head-of-Line Blocking do Synchronous Sleep trong Async Handler**
+
+Khi incident `rag_slow` được kích hoạt, hàm `retrieve()` trong `app/mock_rag.py` thực hiện:
+```python
+if STATE["rag_slow"]:
+    time.sleep(2.5)  # Blocking synchronous sleep!
+```
+
+**Vấn đề**: Route handler FastAPI được định nghĩa bằng `async def`, nhưng `time.sleep()` là blocking operation. Lệnh sleep đồng bộ này **block toàn bộ Event Loop**, khiến:
+1. Request đầu tiên bị trễ thêm ~2.5s
+2. Các request đồng thời khác phải đợi (Head-of-Line Blocking)
+3. Mỗi request tiếp theo tích lũy thêm ~2.5s chờ đợi Event Loop
+
+**Mã nguồn gây lỗi** (`app/mock_rag.py:17-18`):
+```python
+if STATE["rag_slow"]:
+    time.sleep(2.5)  # ← Blocking!
+```
+
+### Fix action
+**Thay `time.sleep()` bằng `asyncio.sleep()` trong async context**:
+
+```python
+import asyncio
+
+async def retrieve_async(message: str) -> list[str]:
+    if STATE["tool_fail"]:
+        raise RuntimeError("Vector store timeout")
+    if STATE["rag_slow"]:
+        await asyncio.sleep(2.5)  # ← Non-blocking!
+    # ... rest of logic
+```
+
+Hoặc sử dụng thread pool cho blocking operations:
+```python
+await asyncio.to_thread(time.sleep, 2.5)
+```
+
+### Preventive measure
+1. **Code Review Checklist**: Tất cả `async def` handlers phải tránh blocking operations (`time.sleep`, synchronous I/O)
+2. **Static Analysis**: Cấu hình linter (ruff, pylint) để cảnh báo `time.sleep()` trong async functions
+3. **Alert Rule**: Alert khi `latency_p95 > 2000ms` với thời gian khôi phục tự động
+4. **Load Testing**: Thêm load test với `--concurrency 5` vào CI pipeline để phát hiện race conditions
+5. **Documentation**: Ghi chú rõ ràng trong `docs/ARCHITECTURE.md` về việc sử dụng async/await đúng cách
 
 ## 7. Đóng góp cá nhân
 
