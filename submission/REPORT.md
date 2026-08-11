@@ -2,10 +2,15 @@
 
 ## 1. Thông tin nhóm
 
-- Tên nhóm:
-- Repository URL:
+- Tên nhóm: B3-1
+- Repository URL: https://github.com/TranChiTam011104/Day13-K3-Observability-B3-1.git
 - Commit SHA cuối:
 - Thành viên và vai trò:
+  - Hùng (V1) — Logging & PII
+  - Hoàng (V2) — Tracing & Prompt Version
+  - Thái (V3) — Dashboard, SLO & Alert
+  - Trung (V4) — Incident Investigation
+  - Tâm (V5) — Report & Demo
 
 ## 2. Kết quả kỹ thuật
 
