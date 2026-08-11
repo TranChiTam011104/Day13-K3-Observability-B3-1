@@ -9,15 +9,21 @@
 
 ## 2. Kết quả kỹ thuật
 
-- Điểm `validate_logs.py`:
+- Điểm `validate_logs.py`: 100/100 (Final) | 30/100 (Baseline)
 - Tổng số traces:
-- Số PII leak còn lại:
+- Số PII leak còn lại: 0
 - Link/đường dẫn dashboard:
 
 ## 3. Logging và tracing
 
 - Evidence correlation ID:
+  ```json
+  {"service": "api", "payload": {"message_preview": "What should not appear in app logs?"}, "event": "request_received", "correlation_id": "req-789deaca", "user_id_hash": "1632c29ecdec", "feature": "qa", "session_id": "s07", "env": "dev", "model": "mock", "level": "info", "ts": "2026-08-11T03:39:14.106862Z"}
+  ```
 - Evidence PII redaction:
+  ```json
+  {"service": "api", "payload": {"message_preview": "What is your refund policy? My email is [REDACTED_EMAIL]"}, "event": "request_received", "correlation_id": "req-f6c3426a", "user_id_hash": "2055254ee30a", "feature": "qa", "session_id": "s01", "env": "dev", "model": "mock", "level": "info", "ts": "2026-08-11T03:39:12.384492Z"}
+  ```
 - Evidence trace waterfall:
 - Giải thích một span đáng chú ý:
 
