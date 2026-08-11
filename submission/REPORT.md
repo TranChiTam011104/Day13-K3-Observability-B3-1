@@ -44,13 +44,16 @@
 
 ## 6. Điều tra challenge
 
-- Challenge ID:
-- Triệu chứng từ metrics:
-- Trace ID liên quan:
-- Log line/correlation ID liên quan:
+- Challenge ID: `day13-k3-observability-v1`
+- Triệu chứng từ metrics: Latency p95 tăng vọt từ ~160ms lên đến 13284ms (hơn 13 giây) dưới tải concurrency = 5.
+- Trace ID liên quan: *Chạy offline cục bộ không ghi nhận Trace ID trên Langfuse (Lỗi Auth 401). Đã phân tích chi tiết qua log.*
+- Log line/correlation ID liên quan: `req-ee976937` (latency: 13284.6ms), `req-9dd76ee0` (latency: 13283.6ms)
 - Root cause:
-- Fix action:
-- Preventive measure:
+  1. Incident `rag_slow` kích hoạt một lệnh block đồng bộ `time.sleep(2.5)` trong hàm `retrieve` của `app/mock_rag.py`.
+  2. Endpoint `/chat` ở `app/main.py` khai báo là `async def chat` nhưng lại thực thi luồng xử lý đồng bộ blocking `agent.run()`. Điều này khóa chặt FastAPI Event Loop khiến các request đồng thời bị nghẽn và phải xử lý tuần tự (mỗi request mất ~2.6s, request thứ 5 phải đợi cả 4 request trước chạy xong, tổng cộng mất hơn 13s).
+- Fix action: Chuyển đổi định nghĩa endpoint thành hàm đồng bộ thông thường `def chat(...)` thay vì `async def` để FastAPI tự động đẩy vào các luồng riêng biệt trong Thread Pool, hoặc chuyển đổi toàn bộ thư viện sang phi tuần tự (async/await) hoàn toàn.
+- Preventive measure: Thiết lập static analysis/linting để cấm sử dụng các hàm blocking đồng bộ trong hàm `async def` và cấu hình alert cảnh báo sớm khi latency p95 > 2s.
+
 
 ## 7. Đóng góp cá nhân
 
