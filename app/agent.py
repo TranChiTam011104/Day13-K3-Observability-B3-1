@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass
+import structlog
 
 from . import metrics
 from .mock_llm import FakeLLM
@@ -45,16 +46,22 @@ class LabAgent:
 
         if hasattr(langfuse_client, "update_current_trace"):
             try:
+                context_vars = structlog.contextvars.get_contextvars()
+                metadata = {
+                    "prompt_name": prompt.name,
+                    "prompt_label": prompt.label,
+                    "prompt_version": prompt.version,
+                    "prompt_source": prompt.source,
+                }
+                for field in ["correlation_id", "user_id_hash", "session_id", "feature", "model", "env"]:
+                    if field in context_vars:
+                        metadata[field] = context_vars[field]
+
                 langfuse_client.update_current_trace(
-                    user_id=hash_user_id(user_id),
-                    session_id=session_id,
-                    tags=["lab", feature, self.model],
-                    metadata={
-                        "prompt_name": prompt.name,
-                        "prompt_label": prompt.label,
-                        "prompt_version": prompt.version,
-                        "prompt_source": prompt.source,
-                    },
+                    user_id=context_vars.get("user_id_hash", hash_user_id(user_id)),
+                    session_id=context_vars.get("session_id", session_id),
+                    tags=["lab", context_vars.get("feature", feature), self.model],
+                    metadata=metadata,
                 )
             except Exception:
                 pass
